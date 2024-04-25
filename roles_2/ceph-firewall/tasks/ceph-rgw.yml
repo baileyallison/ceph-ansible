@@ -1,0 +1,7 @@
+---
+- name: open ceph rgw firewall
+  ansible.posix.firewalld:
+    - port: {{ ceph-rgw-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled

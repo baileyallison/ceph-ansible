@@ -1,0 +1,8 @@
+---
+- name: Start the monitor service
+  ansible.builtin.systemd:
+    name: ceph-mon@{{ ansible_facts['hostname'] }}
+    state: started
+    enabled: true
+    masked: false
+    daemon_reload: true

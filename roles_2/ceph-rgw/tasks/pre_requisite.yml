@@ -1,0 +1,57 @@
+---
+- name: Create rados gateway directories
+  ansible.builtin.file:
+    path: "/var/lib/ceph/radosgw/{{ cluster }}-rgw.{{ ansible_facts['hostname'] }}.{{ item.instance_name }}"
+    state: directory
+    owner: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    group: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    mode: "{{ ceph_directories_mode }}"
+  delegate_to: "{{ groups.get(mon_group_name, [])[0] }}"
+  loop: "{{ rgw_instances }}"
+  when: groups.get(mon_group_name, []) | length > 0
+
+- name: Create rgw keyrings
+  ceph_key:
+    name: "client.rgw.{{ ansible_facts['hostname'] }}.{{ item.instance_name }}"
+    cluster: "{{ cluster }}"
+    user: "client.bootstrap-rgw"
+    user_key: /var/lib/ceph/bootstrap-rgw/{{ cluster }}.keyring
+    dest: "/var/lib/ceph/radosgw/{{ cluster }}-rgw.{{ ansible_facts['hostname'] }}.{{ item.instance_name }}/keyring"
+    caps:
+      osd: 'allow rwx'
+      mon: 'allow rw'
+    import_key: "{{ True if groups.get(mon_group_name, []) | length > 0 else False }}"
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    mode: "0600"
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+  delegate_to: "{{ groups[mon_group_name][0] if groups.get(mon_group_name, []) | length > 0 else 'localhost' }}"
+  with_items: "{{ rgw_instances }}"
+  when: cephx | bool
+
+- name: Get keys from monitors
+  ceph_key:
+    name: "client.rgw.{{ ansible_facts['hostname'] }}.{{ item.instance_name }}"
+    cluster: "{{ cluster }}"
+    output_format: plain
+    state: info
+  register: _rgw_keys
+  loop: "{{ rgw_instances }}"
+  delegate_to: "{{ groups.get(mon_group_name)[0] }}"
+  when:
+    - cephx | bool
+    - groups.get(mon_group_name, []) | length > 0
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+- name: Copy ceph key(s) if needed
+  ansible.builtin.copy:
+    dest: "/var/lib/ceph/radosgw/{{ cluster }}-rgw.{{ ansible_facts['hostname'] }}.{{ item.item.instance_name }}/keyring"
+    content: "{{ item.stdout + '\n' }}"
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    mode: "{{ ceph_keyring_permissions }}"
+  with_items: "{{ _rgw_keys.results }}"
+  when:
+    - item is not skipped
+    - groups.get(mon_group_name, []) | length > 0
+  no_log: "{{ no_log_on_ceph_key_tasks }}"

@@ -1,0 +1,8 @@
+---
+- name: Systemd start mgr
+  ansible.builtin.systemd:
+    name: ceph-mgr@{{ ansible_facts['hostname'] }}
+    state: started
+    enabled: true
+    masked: false
+    daemon_reload: true

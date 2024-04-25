@@ -1,0 +1,26 @@
+---
+- name: Waiting for the monitor(s) to form the quorum...
+  ansible.builtin.command: >
+    ceph
+    --cluster {{ cluster }}
+    daemon mon.{{ ansible_facts['hostname'] }}
+    mon_status
+    --format json
+  register: ceph_health_raw
+  run_once: true
+  until: >
+    (ceph_health_raw.stdout | length > 0) and (ceph_health_raw.stdout | default('{}') | from_json)['state'] in ['leader', 'peon']
+  retries: "{{ handler_health_mon_check_retries }}"
+  delay: "{{ handler_health_mon_check_delay }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Fetch ceph initial keys
+  ceph_key:
+    state: fetch_initial_keys
+    cluster: "{{ cluster }}"
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    mode: "0400"
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+

@@ -56,17 +56,6 @@
       when:
         - containerized_deployment | bool
 
-    - name: Find a running mon container
-      ansible.builtin.command: "{{ container_binary }} ps -q --filter name=ceph-mon-{{ hostvars[item]['ansible_facts']['hostname'] }}"
-      register: find_running_mon_container
-      failed_when: false
-      run_once: true
-      delegate_to: "{{ item }}"
-      with_items: "{{ groups.get(mon_group_name, []) }}"
-      changed_when: false
-      when:
-        - containerized_deployment | bool
-
     - name: Check for a ceph mon socket
       ansible.builtin.shell: stat --printf=%n {{ rbd_client_admin_socket_path }}/{{ cluster }}-mon*.asok
       changed_when: false
@@ -76,8 +65,6 @@
       run_once: true
       delegate_to: "{{ item }}"
       with_items: "{{ groups.get(mon_group_name, []) }}"
-      when:
-        - not containerized_deployment | bool
 
     - name: Check if the ceph mon socket is in-use
       ansible.builtin.command: grep -q {{ item.stdout }} /proc/net/unix
@@ -89,7 +76,6 @@
       delegate_to: "{{ hostvars[item.item]['inventory_hostname'] }}"
       with_items: "{{ mon_socket_stat.results }}"
       when:
-        - not containerized_deployment | bool
         - item.rc == 0
 
     - name: Set_fact running_mon - non_container
@@ -98,18 +84,8 @@
       with_items: "{{ mon_socket.results }}"
       run_once: true
       when:
-        - not containerized_deployment | bool
         - item.rc is defined
         - item.rc == 0
-
-    - name: Set_fact running_mon - container
-      ansible.builtin.set_fact:
-        running_mon: "{{ item.item }}"
-      run_once: true
-      with_items: "{{ find_running_mon_container.results }}"
-      when:
-        - containerized_deployment | bool
-        - item.stdout_lines | default([]) | length > 0
 
     - name: Set_fact _container_exec_cmd
       ansible.builtin.set_fact:

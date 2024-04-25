@@ -1,0 +1,14 @@
+---
+- name: Start rgw instance
+  ansible.builtin.systemd:
+    name: ceph-radosgw@rgw.{{ ansible_facts['hostname'] }}.{{ item.instance_name }}
+    state: started
+    enabled: true
+    masked: false
+  with_items: "{{ rgw_instances }}"
+
+- name: Enable the ceph-radosgw.target service
+  ansible.builtin.systemd:
+    name: ceph-radosgw.target
+    enabled: true
+    masked: false

@@ -1,0 +1,10 @@
+---
+ceph-mon-firewall: ceph-mon
+ceph-firewall: ceph
+ceph-dashboard-firewall: 8443/tcp
+ceph-dashboard-exporter-firewall: 9281/tcp
+node-exporter-firewall: 9091/tcp
+prometheus-firewall: 9092/tcp
+grafana-firewall: 3000/tcp
+alertmanager-firewall: 9093-9094/tcp
+zone: public

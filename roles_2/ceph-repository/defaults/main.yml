@@ -1,0 +1,3 @@
+ceph_stable_key: https://download.ceph.com/keys/release.asc
+ceph_mirror: http://download.ceph.com
+ceph_stable_release: quincy

@@ -1,0 +1,33 @@
+---
+# this is for ceph-disk, the ceph-disk command is gone so we have to list /var/lib/ceph
+- name: Get osd ids
+  ansible.builtin.shell: ls /var/lib/ceph/osd/ | sed 's/.*-//'  # noqa risky-shell-pipe
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  register: osd_ids_non_container
+
+- name: Collect osd ids
+  ceph_volume:
+    cluster: "{{ cluster }}"
+    action: list
+  register: ceph_osd_ids
+
+- name: Ensure /var/lib/ceph/osd/<cluster>-<item> is present
+  ansible.builtin.file:
+    state: directory
+    path: "/var/lib/ceph/osd/{{ cluster }}-{{ item }}"
+    mode: "{{ ceph_directories_mode }}"
+    owner: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    group: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+  with_items: "{{ ((ceph_osd_ids.stdout | default('{}', True) | from_json).keys() | list) | union(osd_ids_non_container.stdout_lines | default([])) }}"
+
+- name: Systemd start osd
+  ansible.builtin.systemd:
+    name: ceph-osd@{{ item }}
+    state: started
+    enabled: true
+    masked: false
+    daemon_reload: true
+  with_items: "{{ ((ceph_osd_ids.stdout | default('{}', True) | from_json).keys() | list) | union(osd_ids_non_container.stdout_lines | default([])) }}"

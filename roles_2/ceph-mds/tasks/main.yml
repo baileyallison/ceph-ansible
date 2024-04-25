@@ -1,0 +1,12 @@
+---
+- name: Include create_mds_filesystems.yml
+  ansible.builtin.include_tasks: create_mds_filesystems.yml
+  when:
+    - inventory_hostname == groups[mds_group_name] | first
+
+- name: Include common.yml
+  ansible.builtin.include_tasks: common.yml
+
+- name: Include start_mds.yml
+  ansible.builtin.include_tasks: start_mds.yml
+

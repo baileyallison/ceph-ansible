@@ -1,0 +1,31 @@
+---
+- name: setup ceph repository on debian family OS
+  when: ansible_facts['os_family'] == 'Debian'
+  block:
+    - name: install dependencies for apt modules
+      package:
+        name: ['apt-transport-https', 'ca-certificates', 'gnupg', 'software-properties-common']
+        update_cache: yes
+      register: result
+      until: result is succeeded
+
+    - name: configure debian ceph community repository stable key
+      apt_key:
+        url: "{{ ceph_stable_key }}"
+        state: present
+      register: result
+      until: result is succeeded
+
+    - name: configure debian ceph stable community repository
+      apt_repository:
+        repo: "deb {{ ceph_mirror }}/debian-{{ ceph_version }} {{ ansible_facts['distribution_release'] }} main"
+        state: present
+        update_cache: yes
+      until: result is succeeded
+
+    - name: update apt cache if cache_valid_time has expired
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      register: result
+      until: result is succeeded

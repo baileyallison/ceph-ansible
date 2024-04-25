@@ -1,0 +1,26 @@
+---
+- name: Include deploy_monitors.yml
+  ansible.builtin.include_tasks: deploy_monitors.yml
+
+- name: Include start_monitor.yml
+  ansible.builtin.include_tasks: start_monitor.yml
+
+- name: Include_tasks ceph_keys.yml
+  ansible.builtin.include_tasks: ceph_keys.yml
+
+- name: Include secure_cluster.yml
+  ansible.builtin.include_tasks: secure_cluster.yml
+  when:
+    - secure_cluster | bool
+    - inventory_hostname == groups[mon_group_name] | first
+
+- name: Set cluster configs
+  ceph_config:
+    action: set
+    who: "{{ item.0.key }}"
+    option: "{{ item.1.key }}"
+    value: "{{ item.1.value }}"
+  run_once: true
+  when:
+    - item.1.value != omit
+  loop: "{{ ceph_cluster_conf | dict2dict }}"

@@ -1,0 +1,23 @@
+deb_install_pkgs:
+  - "45drives-tools"
+  - "chronyd"
+  - "logrotate"
+
+rhel_install_pkgs:
+  - "45drives-tools"
+  - "chronyd"
+  - "epel-release"
+  - "logrotate"
+
+deb_cleanup_pkgs:
+  - "zfs-dkms"
+  - "zfsutils-linux"
+  - "libzfs2linux"
+  - "libzfslinux-dev"
+  - "cockpit-zfs-manager"
+  - "cockpit-machines"
+
+rhel_cleanup_pkgs:
+  - "zfs"
+  - "cockpit-zfs-manager"
+  - "cockpit-machines"

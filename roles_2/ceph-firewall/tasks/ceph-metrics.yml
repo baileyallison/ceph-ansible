@@ -1,0 +1,30 @@
+---
+- name: open node exporter firewall
+  ansible.posix.firewalld:
+    - port: {{ node-exporter-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled
+
+- name: open prometheus firewall
+  ansible.posix.firewalld:
+    - port: {{ prometheus-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled
+    when: hosts = mons 
+
+- name: open grafana firewall
+  ansible.posix.firewalld:
+    - port: {{ grafana-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled
+
+- name: open alertmanager firewall
+  ansible.posix.firewalld:
+    - port: {{ alertmanager-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled
+    when: hosts = mons 

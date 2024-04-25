@@ -1,0 +1,7 @@
+- include: ceph-firewall.yml
+
+- include: ceph-dashboard.yml
+
+- include: ceph-metrics.yml
+
+- include: ceph-rgw.yml

@@ -1,0 +1,156 @@
+---
+- name: Begin to setup ceph-mons
+  block:
+    - name: Check if monitor initial keyring already exists
+      ceph_key:
+        name: mon.
+        cluster: "{{ cluster }}"
+        user: mon.
+        user_key: "/var/lib/ceph/mon/{{ cluster }}-{{ hostvars[running_mon]['ansible_facts']['hostname'] }}/keyring"
+        output_format: json
+        state: info
+      register: initial_mon_key
+      run_once: true
+      delegate_to: "{{ running_mon }}"
+      failed_when: initial_mon_key.rc not in [0, 2]
+      no_log: "{{ no_log_on_ceph_key_tasks }}"
+      when: running_mon is defined
+
+    - name: Generate monitor initial keyring
+      ceph_key:
+        state: generate_secret
+      register: monitor_keyring
+      delegate_to: localhost
+      become: false
+      run_once: true
+      no_log: "{{ no_log_on_ceph_key_tasks }}"
+      when:
+        - initial_mon_key is skipped
+          or
+          initial_mon_key is not succeeded
+
+    - name: Set_fact _initial_mon_key_success
+      ansible.builtin.set_fact:  # when initial_mon_key is registered above, `rc: 2` is considered success.
+        _initial_mon_key_success: "{{ initial_mon_key is not skipped and initial_mon_key.rc == 0 }}"
+
+    - name: Get initial keyring when it already exists
+      ansible.builtin.set_fact:
+        monitor_keyring: "{{ (initial_mon_key.stdout | from_json)[0]['key'] if _initial_mon_key_success | bool else monitor_keyring.stdout }}"
+      when: initial_mon_key.stdout|default('')|length > 0 or monitor_keyring is not skipped
+      no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+    - name: Create monitor initial keyring
+      ceph_key:
+        name: mon.
+        dest: "/var/lib/ceph/tmp/"
+        secret: "{{ monitor_keyring }}"
+        cluster: "{{ cluster }}"
+        caps:
+          mon: allow *
+        import_key: false
+        owner: "{{ 'ceph' }}"
+        group: "{{ 'ceph' }}"
+        mode: "0400"
+      no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+- name: Create monitor directory
+  ansible.builtin.file:
+    path: /var/lib/ceph/mon/{{ cluster }}-{{ monitor_name }}
+    state: directory
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    mode: "{{ ceph_directories_mode }}"
+
+- name: Recursively fix ownership of monitor directory
+  ansible.builtin.file:
+    path: /var/lib/ceph/mon/{{ cluster }}-{{ monitor_name }}
+    state: directory
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    recurse: true
+
+- name: Create admin keyring
+  ceph_authtool:
+    name: client.admin
+    path: "/etc/ceph/{{ cluster }}.client.admin.keyring"
+    owner: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    group: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    mode: "0400"
+    caps:
+      mon: allow *
+      mgr: allow *
+      osd: allow *
+      mds: allow *
+    create_keyring: true
+    gen_key: "{{ True if admin_secret == 'admin_secret' else omit }}"
+    add_key: "{{ admin_secret if admin_secret != 'admin_secret' else omit }}"
+  delegate_to: "{{ groups[mon_group_name][0] }}"
+  run_once: true
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+- name: Slurp admin keyring
+  ansible.builtin.slurp:
+    src: "/etc/ceph/{{ cluster }}.client.admin.keyring"
+  delegate_to: "{{ groups[mon_group_name][0] }}"
+  run_once: true
+  register: admin_keyring
+
+- name: Copy admin keyring over to mons
+  ansible.builtin.copy:
+    dest: "{{ admin_keyring.source }}"
+    content: "{{ admin_keyring.content | b64decode }}"
+    owner: "{{ 'ceph' }}"
+    group: "{{ 'ceph' }}"
+    mode: "0600"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups[mon_group_name] }}"
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+- name: Import admin keyring into mon keyring
+  ceph_authtool:
+    path: "/var/lib/ceph/tmp/{{ cluster }}.mon..keyring"
+    owner: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    group: "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    mode: "0400"
+    import_keyring: "/etc/ceph/{{ cluster }}.client.admin.keyring"
+  no_log: "{{ no_log_on_ceph_key_tasks }}"
+
+- name: Set_fact ceph-mon container command
+  ansible.builtin.set_fact:
+    ceph_mon_cmd: "{{ 'ceph-mon' }}"
+
+- name: Set_fact monmaptool container command
+  ansible.builtin.set_fact:
+    ceph_monmaptool_cmd: "{{ 'monmaptool' }}"
+
+- name: Generate initial monmap
+  ansible.builtin.command: >
+    {{ ceph_monmaptool_cmd }}
+    --create
+    {% for name, addr in _monitor_addresses.items() -%}
+    --addv
+    {{ hostvars[name]['ansible_facts']['hostname'] }}
+    {% if mon_host_v1.enabled | bool %}
+    {% set _v1 = ',v1:' + addr + mon_host_v1.suffix %}
+    {% endif %}
+    [{{ "v2:" + addr + mon_host_v2.suffix }}{{ _v1 | default('') }}]
+    {# {%- if not loop.last -%},{%- endif %} #}
+    {%- endfor %}
+    --enable-all-features
+    --clobber /etc/ceph/monmap
+  args:
+    creates: /etc/ceph/monmap
+
+- name: Ceph monitor mkfs with keyring
+  ansible.builtin.command: >
+    {{ ceph_mon_cmd }}
+    --cluster {{ cluster }}
+    --setuser "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    --setgroup "{{ ceph_uid if containerized_deployment | bool else 'ceph' }}"
+    --mkfs
+    -i {{ monitor_name }}
+    --fsid {{ fsid }}
+    --keyring /var/lib/ceph/tmp/{{ cluster }}.mon..keyring
+    --monmap /etc/ceph/monmap
+  args:
+    creates: /var/lib/ceph/mon/{{ cluster }}-{{ monitor_name }}/keyring

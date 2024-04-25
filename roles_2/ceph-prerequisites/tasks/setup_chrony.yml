@@ -1,0 +1,18 @@
+---
+- name: install chrony
+  package:
+    name: chrony
+    state: present
+  register: result
+  until: result is succeeded
+
+- name: enable chronyd
+  service:
+    name: "{{ chrony_daemon_name }}"
+
+  set_fact:
+    chrony_daemon_name: chronyd
+  when: ansible_facts['os_family'] == ['RedHat']
+  set_fact:
+    chrony_daemon_name: chrony
+  when: ansible_facts['os_family'] == 'Debian'

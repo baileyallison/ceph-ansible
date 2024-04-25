@@ -1,0 +1,15 @@
+---
+- name: open ceph-dashboard firewall
+  ansible.posix.firewalld:
+    - port: {{ ceph-dashboard-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled
+    when: hosts = mgrs
+
+- name: open ceph-dashboard-exporter firewall
+  ansible.posix.firewalld:
+    - port: {{ ceph-dashboard-exporter-firewall }}
+      permanent: true
+      immediate: true
+      state: enabled

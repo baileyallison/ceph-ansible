@@ -1,0 +1,9 @@
+---
+- name: create ceph.conf file
+    src: "ceph.conf.j2"
+    dest: "/etc/ceph/{{ cluster }}.conf"
+    owner: "ceph"
+    group: "ceph"
+    mode: "0644"
+  notify:
+    - Restart ceph mons
